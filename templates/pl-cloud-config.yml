@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+data:
+    PL_CLOUD_ADDR: withpixie.ai:443
+    PL_CLUSTER_NAME: {{ .Values.plCloudName.name }}
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: pl-cloud-config
+  namespace: pl
