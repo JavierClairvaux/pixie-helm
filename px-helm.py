@@ -17,16 +17,16 @@ for f in files:
     if kpattern in f:
         kYaml = f
 
-ySecret = open('./pixie-helm/templates/deploy-key.yml', 'w')
+ySecret = open('./templates/deploy-key.yml', 'w')
 ySecret.write(kYaml)
 ySecret.close()
 
-sstream = open('./pixie-helm/templates/deploy-key.yml', 'r')
+sstream = open('./templates/deploy-key.yml', 'r')
 secret = yaml.safe_load(sstream)
 sstream.close()
 secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-sstream = open('./pixie-helm/templates/deploy-key.yml', 'w')
+sstream = open('./templates/deploy-key.yml', 'w')
 yaml.dump(secret, sstream)
 sstream.close()
 
@@ -34,28 +34,28 @@ for f in files:
     if 'PL_CLUSTER_NAME' in f:
         nYaml = f
 
-config_map = open('./pixie-helm/templates/pl-cloud-config.yml', 'w')
+config_map = open('./templates/pl-cloud-config.yml', 'w')
 config_map.write(nYaml)
 config_map.close()
 
-cstream = open('./pixie-helm/templates/pl-cloud-config.yml', 'r')
+cstream = open('./templates/pl-cloud-config.yml', 'r')
 config = yaml.safe_load(cstream)
 cstream.close()
 
 config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
 
-config_map = open('./pixie-helm/templates/pl-cloud-config.yml', 'w')
+config_map = open('./templates/pl-cloud-config.yml', 'w')
 yaml.dump(config, config_map)
 config_map.close()
 
 kname = "demo"
-vstream = open('./pixie-helm/values.yaml', 'r')
+vstream = open('./values.yaml', 'r')
 values = yaml.safe_load(vstream)
 vstream.close()
 values['deployKey']['key'] = key
 values['plCloudName']['name'] = kname
 
-vstream = open('./pixie-helm/values.yaml', 'w')
+vstream = open('./values.yaml', 'w')
 yaml.dump(values, vstream)
 vstream.close()
 print('Done!')
