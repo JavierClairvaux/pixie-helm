@@ -1,5 +1,14 @@
-import subprocess, re, yaml
+import subprocess, re, yaml, os, sys
 
+if len(sys.argv) == 1:
+    kname = "demo"
+elif len(sys.argv) == 2:
+    kname = sys.argv[1]
+else:
+    print('No more than one argument!')
+    exit()
+
+print("Getting deploy key!")
 proc = subprocess.Popen( ['/usr/local/bin/px', 'deploy-key', 'create'],  stderr=subprocess.PIPE )
 key = proc.stderr.read()
 key = re.split( r'\s', key.decode('utf-8') )[-2]
@@ -17,16 +26,25 @@ for f in files:
     if kpattern in f:
         kYaml = f
 
-ySecret = open('./templates/deploy-key.yml', 'w')
+#Creating helm chart
+print("Creating Helm Chart!")
+helm_dir = "./pixie-helm-"+kname
+try:
+    os.mkdir(helm_dir)
+    os.mkdir(helm_dir+"/templates")
+except:
+    print("pixie-helm-",kname," dir already exists!")
+
+ySecret = open(helm_dir+'/templates/deploy-key.yml', 'w')
 ySecret.write(kYaml)
 ySecret.close()
 
-sstream = open('./templates/deploy-key.yml', 'r')
+sstream = open(helm_dir+'/templates/deploy-key.yml', 'r')
 secret = yaml.safe_load(sstream)
 sstream.close()
 secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-sstream = open('./templates/deploy-key.yml', 'w')
+sstream = open(helm_dir+'/templates/deploy-key.yml', 'w')
 yaml.dump(secret, sstream)
 sstream.close()
 
@@ -34,28 +52,42 @@ for f in files:
     if 'PL_CLUSTER_NAME' in f:
         nYaml = f
 
-config_map = open('./templates/pl-cloud-config.yml', 'w')
+config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
 config_map.write(nYaml)
 config_map.close()
 
-cstream = open('./templates/pl-cloud-config.yml', 'r')
+cstream = open(helm_dir+'/templates/pl-cloud-config.yml', 'r')
 config = yaml.safe_load(cstream)
 cstream.close()
 
 config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
 
-config_map = open('./templates/pl-cloud-config.yml', 'w')
+config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
 yaml.dump(config, config_map)
 config_map.close()
 
-kname = "demo"
-vstream = open('./values.yaml', 'r')
-values = yaml.safe_load(vstream)
-vstream.close()
-values['deployKey']['key'] = key
-values['plCloudName']['name'] = kname
+values = {
+        'deployKey': {'key': key}, 
+        'plCloudName': {'name': kname}, 
+        'replicaCount': 1
+        }
+#values['deployKey']['key'] = key
+#values['plCloudName']['name'] = kname
 
-vstream = open('./values.yaml', 'w')
+vstream = open(helm_dir+'/values.yaml', 'w')
 yaml.dump(values, vstream)
 vstream.close()
+
+chart = { 
+        'apiVersion': 'v2', 
+        'name': 'pixie-helm', 
+        'description': 'A Helm chart for deploying Pixie', 
+        'type': 'application', 
+        'version': '0.1.0', 
+        'appVersion': '1.16.0'
+        }
+chart['name'] = chart['name']+"-"+kname
+cstream = open(helm_dir+'/Chart.yaml', 'w')
+yaml.dump(chart, cstream)
+cstream.close()
 print('Done!')
