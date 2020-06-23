@@ -31,7 +31,7 @@ def main():
     key = re.split(r'\s', key.decode('utf-8'))[-2]
     key = key.strip('"')
     subprocess.run([
-         '/home/jaier-c/bin/px',
+         '/usr/local/bin/px',
          'deploy',
          '--extract_yaml',
          './',
