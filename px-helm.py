@@ -9,6 +9,8 @@ import logging
 logger = logging.getLogger('default')
 logger.setLevel(logging.DEBUG)
 
+PX_BINARY_PATH = '/usr/local/bin/px'
+
 
 def parseargs():
     if len(sys.argv) == 1:
@@ -24,14 +26,14 @@ def main():
     kname = parseargs()
     logger.info("Getting deploy key!")
     proc = subprocess.Popen(
-        ['/usr/local/bin/px', 'deploy-key', 'create'],
+        [PX_BINARY_PATH, 'deploy-key', 'create'],
         stderr=subprocess.PIPE
     )
     key = proc.stderr.read()
     key = re.split(r'\s', key.decode('utf-8'))[-2]
     key = key.strip('"')
     subprocess.run([
-         '/usr/local/bin/px',
+         PX_BINARY_PATH,
          'deploy',
          '--extract_yaml',
          './',
@@ -53,25 +55,26 @@ def main():
     # Creating helm chart
     logger.debug("Creating Helm Chart!")
     helm_dir = "./pixie-helm-"+kname
+    template_dir = helm_dir+"/templates/"
     try:
         os.mkdir(helm_dir)
-        os.mkdir(helm_dir+"/templates")
+        os.mkdir(template_dir)
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
         logger.debug("pixie-helm-", kname, " dir already exists!")
         pass
 
-    ySecret = open(helm_dir+'/templates/deploy-key.yml', 'w')
+    ySecret = open(template_dir+'deploy-key.yml', 'w')
     ySecret.write(kYaml)
     ySecret.close()
 
-    sstream = open(helm_dir+'/templates/deploy-key.yml', 'r')
+    sstream = open(template_dir+'deploy-key.yml', 'r')
     secret = yaml.safe_load(sstream)
     sstream.close()
     secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-    sstream = open(helm_dir+'/templates/deploy-key.yml', 'w')
+    sstream = open(template_dir+'deploy-key.yml', 'w')
     yaml.dump(secret, sstream)
     sstream.close()
 
@@ -79,17 +82,17 @@ def main():
         if 'PL_CLUSTER_NAME' in f:
             nYaml = f
 
-    config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
+    config_map = open(template_dir+'pl-cloud-config.yml', 'w')
     config_map.write(nYaml)
     config_map.close()
 
-    cstream = open(helm_dir+'/templates/pl-cloud-config.yml', 'r')
+    cstream = open(template_dir+'pl-cloud-config.yml', 'r')
     config = yaml.safe_load(cstream)
     cstream.close()
 
     config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
 
-    config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
+    config_map = open(template_dir+'pl-cloud-config.yml', 'w')
     yaml.dump(config, config_map)
     config_map.close()
 
