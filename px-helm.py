@@ -5,6 +5,7 @@ import os
 import sys
 import errno
 import logging
+import shutil
 
 logger = logging.getLogger('default')
 logger.setLevel(logging.DEBUG)
@@ -100,6 +101,9 @@ def main():
         fs_new.write('---\n')
         fs_new.write(f)
     fs_new.close() 
+    shutil.copy("./pixie_yamls/00_namespace/00_namespace.yaml", template_dir)
+    shutil.copy("./pixie_yamls/01_secrets/01_secret.yaml", template_dir)
+    shutil.copy("./pixie_yamls/02_manifests/03_bootstrap.yaml", template_dir)
 
     config_map = open(template_dir+'pl-cloud-config.yml', 'w')
     config_map.write(nYaml)
