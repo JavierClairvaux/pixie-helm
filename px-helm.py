@@ -11,6 +11,17 @@ logger.setLevel(logging.DEBUG)
 
 PX_BINARY_PATH = '/usr/local/bin/px'
 
+def dumptoyaml(path, values):
+    stream = open(path, 'w')
+    yaml.dump(values, stream)
+    stream.close()
+
+def readyaml(path):
+    stream = open(path, 'r')
+    json_yaml = yaml.safe_load(stream)
+    stream.close()
+    return json_yaml
+
 
 def parseargs():
     if len(sys.argv) == 1:
@@ -42,7 +53,7 @@ def main():
     ])
     subprocess.run(['tar', '-xvf', './yamls.tar'])
 
-    fs = open('./pixie_yamls/01_secrets/03_secret.yaml', 'r')
+    fs = open('./pixie_yamls/01_secrets/02_secret.yaml', 'r')
     slines = fs.read()
     fs.close()
     files = slines.split('---')
@@ -51,6 +62,10 @@ def main():
     for f in files:
         if kpattern in f:
             kYaml = f
+            kline = files.index(f)
+
+    files.pop(kline)
+
 
     # Creating helm chart
     logger.debug("Creating Helm Chart!")
@@ -69,44 +84,40 @@ def main():
     ySecret.write(kYaml)
     ySecret.close()
 
-    sstream = open(template_dir+'deploy-key.yml', 'r')
-    secret = yaml.safe_load(sstream)
-    sstream.close()
+    secret = readyaml(template_dir+'deploy-key.yml')
     secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-    sstream = open(template_dir+'deploy-key.yml', 'w')
-    yaml.dump(secret, sstream)
-    sstream.close()
+    dumptoyaml(template_dir+'deploy-key.yml', secret)
 
     for f in files:
         if 'PL_CLUSTER_NAME' in f:
             nYaml = f
+            nline = files.index(f)
+
+    files.pop(nline)
+    fs_new = open(template_dir+'02_secret_new.yaml', 'w+')
+    for f in files:
+        fs_new.write('---\n')
+        fs_new.write(f)
+    fs_new.close() 
 
     config_map = open(template_dir+'pl-cloud-config.yml', 'w')
     config_map.write(nYaml)
     config_map.close()
 
-    cstream = open(template_dir+'pl-cloud-config.yml', 'r')
-    config = yaml.safe_load(cstream)
-    cstream.close()
+    config = readyaml(template_dir+'pl-cloud-config.yml')
 
     config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
 
-    config_map = open(template_dir+'pl-cloud-config.yml', 'w')
-    yaml.dump(config, config_map)
-    config_map.close()
+    dumptoyaml(template_dir+'pl-cloud-config.yml', config)
 
     values = {
             'deployKey': {'key': key},
             'plCloudName': {'name': kname},
             'replicaCount': 1
             }
-    # values['deployKey']['key'] = key
-    # values['plCloudName']['name'] = kname
 
-    vstream = open(helm_dir+'/values.yaml', 'w')
-    yaml.dump(values, vstream)
-    vstream.close()
+    dumptoyaml(helm_dir+'/values.yaml', values)
 
     chart = {
         'apiVersion': 'v2',
@@ -117,9 +128,7 @@ def main():
         'appVersion': '1.16.0'
     }
     chart['name'] = chart['name']+"-"+kname
-    cstream = open(helm_dir+'/Chart.yaml', 'w')
-    yaml.dump(chart, cstream)
-    cstream.close()
+    dumptoyaml(helm_dir+'/Chart.yaml', chart)
     logger.debug('Done!')
 
 
