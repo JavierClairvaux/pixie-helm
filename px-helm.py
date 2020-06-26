@@ -6,7 +6,6 @@ import sys
 import errno
 import logging
 import shutil
-import stat
 
 logger = logging.getLogger('default')
 logger.setLevel(logging.DEBUG)
