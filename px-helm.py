@@ -128,7 +128,7 @@ def main():
         'name': 'pixie-helm',
         'description': 'A Helm chart for deploying Pixie',
         'type': 'application',
-        'version': '0.1.0',
+        'version': '1.0',
         'appVersion': '1.16.0'
     }
     chart['name'] = chart['name']+"-"+kname
