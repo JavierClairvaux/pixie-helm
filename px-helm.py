@@ -1,93 +1,144 @@
-import subprocess, re, yaml, os, sys
+import subprocess
+import re
+import yaml
+import os
+import sys
+import errno
+import logging
+import shutil
 
-if len(sys.argv) == 1:
-    kname = "demo"
-elif len(sys.argv) == 2:
-    kname = sys.argv[1]
-else:
-    print('No more than one argument!')
-    exit()
+logger = logging.getLogger('default')
+logger.setLevel(logging.DEBUG)
 
-print("Getting deploy key!")
-proc = subprocess.Popen( ['/usr/local/bin/px', 'deploy-key', 'create'],  stderr=subprocess.PIPE )
-key = proc.stderr.read()
-key = re.split( r'\s', key.decode('utf-8') )[-2]
-key = key.strip('"')
-subprocess.run( ['/home/javier-c/bin/px', 'deploy', '--extract_yaml', './', '--deploy_key', key ])
-subprocess.run(['tar', '-xvf', './yamls.tar'])
+PX_BINARY_PATH = '/usr/local/bin/px'
 
-fs = open('./pixie_yamls/01_secrets/03_secret.yaml', 'r')
-slines = fs.read()
-fs.close()
-files = slines.split('---')
-kpattern = 'name: pl-deploy-secrets'
+def dumptoyaml(path, values):
+    stream = open(path, 'w')
+    yaml.dump(values, stream)
+    stream.close()
 
-for f in files:
-    if kpattern in f:
-        kYaml = f
+def readyaml(path):
+    stream = open(path, 'r')
+    json_yaml = yaml.safe_load(stream)
+    stream.close()
+    return json_yaml
 
-#Creating helm chart
-print("Creating Helm Chart!")
-helm_dir = "./pixie-helm-"+kname
-try:
-    os.mkdir(helm_dir)
-    os.mkdir(helm_dir+"/templates")
-except:
-    print("pixie-helm-",kname," dir already exists!")
 
-ySecret = open(helm_dir+'/templates/deploy-key.yml', 'w')
-ySecret.write(kYaml)
-ySecret.close()
+def parseargs():
+    if len(sys.argv) == 1:
+        return "demo"
+    elif len(sys.argv) == 2:
+        return sys.argv[1]
+    else:
+        logger.error('No more than one argument!')
+        exit()
 
-sstream = open(helm_dir+'/templates/deploy-key.yml', 'r')
-secret = yaml.safe_load(sstream)
-sstream.close()
-secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-sstream = open(helm_dir+'/templates/deploy-key.yml', 'w')
-yaml.dump(secret, sstream)
-sstream.close()
+def main():
+    kname = parseargs()
+    logger.info("Getting deploy key!")
+    proc = subprocess.Popen(
+        [PX_BINARY_PATH, 'deploy-key', 'create'],
+        stderr=subprocess.PIPE
+    )
+    key = proc.stderr.read()
+    key = re.split(r'\s', key.decode('utf-8'))[-2]
+    key = key.strip('"')
+    subprocess.run([
+         PX_BINARY_PATH,
+         'deploy',
+         '--extract_yaml',
+         './',
+         '--deploy_key',
+         key
+    ])
+    subprocess.run(['tar', '-xvf', './yamls.tar'])
 
-for f in files:
-    if 'PL_CLUSTER_NAME' in f:
-        nYaml = f
+    fs = open('./pixie_yamls/01_secrets/02_secret.yaml', 'r')
+    slines = fs.read()
+    fs.close()
+    files = slines.split('---')
+    kpattern = 'name: pl-deploy-secrets'
 
-config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
-config_map.write(nYaml)
-config_map.close()
+    for f in files:
+        if kpattern in f:
+            kYaml = f
+            kline = files.index(f)
 
-cstream = open(helm_dir+'/templates/pl-cloud-config.yml', 'r')
-config = yaml.safe_load(cstream)
-cstream.close()
+    files.pop(kline)
 
-config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
 
-config_map = open(helm_dir+'/templates/pl-cloud-config.yml', 'w')
-yaml.dump(config, config_map)
-config_map.close()
+    # Creating helm chart
+    logger.debug("Creating Helm Chart!")
+    helm_dir = "./pixie-helm-"+kname
+    template_dir = helm_dir+"/templates/"
+    try:
+        os.mkdir(helm_dir)
+        os.mkdir(template_dir)
+    except OSError as exc:
+        if exc.errno != errno.EEXIST:
+            raise
+        logger.debug("pixie-helm-", kname, " dir already exists!")
+        pass
 
-values = {
-        'deployKey': {'key': key}, 
-        'plCloudName': {'name': kname}, 
-        'replicaCount': 1
-        }
-#values['deployKey']['key'] = key
-#values['plCloudName']['name'] = kname
+    ySecret = open(template_dir+'deploy-key.yml', 'w')
+    ySecret.write(kYaml)
+    ySecret.close()
 
-vstream = open(helm_dir+'/values.yaml', 'w')
-yaml.dump(values, vstream)
-vstream.close()
+    secret = readyaml(template_dir+'deploy-key.yml')
+    secret['data']['deploy-key'] = "{{ .Values.deployKey.key | b64enc }}"
 
-chart = { 
-        'apiVersion': 'v2', 
-        'name': 'pixie-helm', 
-        'description': 'A Helm chart for deploying Pixie', 
-        'type': 'application', 
-        'version': '0.1.0', 
-        'appVersion': '1.16.0'
-        }
-chart['name'] = chart['name']+"-"+kname
-cstream = open(helm_dir+'/Chart.yaml', 'w')
-yaml.dump(chart, cstream)
-cstream.close()
-print('Done!')
+    dumptoyaml(template_dir+'deploy-key.yml', secret)
+
+    for f in files:
+        if 'PL_CLUSTER_NAME' in f:
+            nYaml = f
+            nline = files.index(f)
+
+    files.pop(nline)
+    fs_new = open(template_dir+'02_secret_new.yaml', 'w+')
+    for f in files:
+        fs_new.write('---\n')
+        fs_new.write(f)
+    fs_new.close() 
+
+    shutil.copy("./pixie_yamls/00_namespace/00_namespace.yaml", template_dir)
+    shutil.copy("./pixie_yamls/01_secrets/01_secret.yaml", template_dir)
+    shutil.copy("./pixie_yamls/02_manifests/03_bootstrap.yaml", template_dir)
+
+    config_map = open(template_dir+'pl-cloud-config.yml', 'w')
+    config_map.write(nYaml)
+    config_map.close()
+
+    config = readyaml(template_dir+'pl-cloud-config.yml')
+
+    config['data']['PL_CLUSTER_NAME'] = "{{ .Values.plCloudName.name }}"
+
+    dumptoyaml(template_dir+'pl-cloud-config.yml', config)
+
+    values = {
+            'deployKey': {'key': key},
+            'plCloudName': {'name': kname},
+            'replicaCount': 1
+            }
+
+    dumptoyaml(helm_dir+'/values.yaml', values)
+
+    proc_app = subprocess.Popen([PX_BINARY_PATH, "version"], stdout=subprocess.PIPE)
+    appv = proc_app.stdout.read()
+
+    chart = {
+        'apiVersion': 'v2',
+        'name': 'pixie-helm',
+        'description': 'A Helm chart for deploying Pixie',
+        'type': 'application',
+        'version': '1.0',
+        'appVersion': appv.decode('utf-8').split('+')[0]
+    }
+    chart['name'] = chart['name']+"-"+kname
+    dumptoyaml(helm_dir+'/Chart.yaml', chart)
+    logger.debug('Done!')
+
+
+if __name__ == '__main__':
+    main()
